@@ -100,14 +100,16 @@ Send to /api/parse with JWT token
 Server validates JWT
         │
         ▼
-Server parses PCN874 format
+Server parses PCN874 format (T rows only)
         │
         ▼
-Returns parsed receipts array + original file content
+Returns parsed supplier receipts array + original file content
         │
         ▼
 Store in React state (NOT in database)
 ```
+
+**Important**: Only T rows (supplier rows) are parsed and returned. All other rows (R, S, O, X, etc.) are preserved in the file but not parsed or displayed.
 
 ### 2. Receipt Search Flow
 
@@ -115,9 +117,9 @@ Store in React state (NOT in database)
 User enters receipt number
         │
         ▼
-Search in local state
+Search in local state (supplier receipts only)
         │
-        ├─── Found (unique) ───► Show receipt details
+        ├─── Found (unique) ───► Show supplier receipt details
         │
         ├─── Found (multiple) ─► Ask for business number
         │                              │
@@ -125,7 +127,7 @@ Search in local state
         │                        Filter by business number
         │                              │
         │                              ▼
-        │                        Show receipt details
+        │                        Show supplier receipt details
         │
         └─── Not found ────────► Show error message
 ```
@@ -168,7 +170,7 @@ User can download or make more changes
 
 ### POST /api/parse
 
-**Purpose**: Parse uploaded PCN874 file
+**Purpose**: Parse uploaded PCN874 file (extracts T rows only)
 
 **Request**:
 ```typescript
@@ -182,16 +184,18 @@ User can download or make more changes
 {
   success: boolean;
   data?: {
-    receipts: IReceipt[];
+    receipts: IReceipt[];  // Only supplier receipts (T rows)
     originalContent: string;
   };
   error?: string;
 }
 ```
 
+**Note**: Only T rows (supplier rows) are parsed and included in the receipts array. All other rows are preserved in the file content but not returned as parsed receipts.
+
 ### POST /api/update-receipt
 
-**Purpose**: Update allocation number for a receipt
+**Purpose**: Update allocation number for a supplier receipt (T row)
 
 **Request**:
 ```typescript

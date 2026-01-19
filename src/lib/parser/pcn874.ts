@@ -1,51 +1,52 @@
 import type { IReceipt } from '@/types';
 
 /**
- * Check if a line is a receipt row (data row)
- * Receipt rows start with a letter (A-Z) and contain '+' separator
+ * Check if a line is a supplier row (T row)
+ * Supplier rows start with 'T' and contain '+' at position 41 (index 40)
+ * Only T rows are processed for allocation management
  */
 export function isReceiptRow(line: string): boolean {
-  return /^[A-Z]/i.test(line) && line.includes('+');
+  return /^T/i.test(line) && line.length === 60 && line[40] === '+';
 }
 
 /**
- * Parse a single receipt row from PCN874 format
+ * Parse a single supplier row (T row) from PCN874 format
  *
- * Row structure (example):
- * R424673351202511020014000000000000000719+0000000000000000000
- * │└────────┘└──┘││└──┘└─────────────┘└───┘│└────────┘└───────┘
- * │    │      │  ││  │        │        │   │    │         │
- * │ Business Year││Day│   Zero-pad   VAT  +  Sum    Allocation
- * │  Number     ││   Receipt#              Without    (9 digits)
+ * T Row structure (60 characters):
+ * T000719567202511160006000006394000004576+0000025424000006394
+ * │└────────┘└──┘││└──┘└────────┘└────────┘│└────────┘└────────┘
+ * │    │      │  ││  │     │         │     │     │         │
+ * │ Business Year││Day│  Receipt    VAT   +   Sum     Allocation
+ * │  Number     ││   Code Number           Without    (9 digits)
  * │            Month                        VAT
- * Row Type (any letter)
+ * Row Type ('T' = supplier)
  *
  * Position breakdown (1-indexed as in docs, 0-indexed in code):
- * - Position 1 (index 0): Row Type (single letter)
+ * - Position 1 (index 0): Row Type - must be 'T'
  * - Position 2-10 (index 1-9): Business Number (9 digits)
  * - Position 11-14 (index 10-13): Year (4 digits)
  * - Position 15-16 (index 14-15): Month (2 digits)
  * - Position 17-18 (index 16-17): Day (2 digits)
- * - Position 19 to (plusIndex-9) (index 18 to plusIndex-10): Receipt number section (zero-padded)
- * - 9 digits before '+': VAT Amount
- * - '+' separator
- * - 10 digits after '+': Sum without VAT
- * - Last 9 digits: Allocation number
+ * - Position 19-22 (index 18-21): Code (4 digits)
+ * - Position 23-31 (index 22-30): Receipt Number (9 digits, zero-padded)
+ * - Position 32-40 (index 31-39): VAT Amount (9 digits)
+ * - Position 41 (index 40): '+' separator
+ * - Position 42-51 (index 41-50): Sum without VAT (10 digits)
+ * - Position 52-60 (index 51-59): Allocation number (9 digits)
  */
 export function parseReceiptRow(
   row: string,
   rowIndex: number,
   lineNumber: number
 ): IReceipt | null {
-  // Must start with a letter
-  if (!/^[A-Z]/i.test(row)) return null;
+  // Must start with 'T' (supplier row)
+  if (!/^T/i.test(row)) return null;
 
-  const plusIndex = row.indexOf('+');
-  if (plusIndex === -1) return null;
+  // Must be exactly 60 characters
+  if (row.length !== 60) return null;
 
-  // Validate minimum row length
-  // Minimum: 1 (type) + 9 (business) + 4 (year) + 2 (month) + 2 (day) + 9 (VAT) + 1 (+) + 10 (sum) + 9 (alloc) = 47
-  if (row.length < 47) return null;
+  // Must have '+' at position 41 (index 40)
+  if (row[40] !== '+') return null;
 
   try {
     const rowType = row[0];
@@ -72,27 +73,24 @@ export function parseReceiptRow(
     const day = parseInt(dayStr, 10);
     if (day < 1 || day > 31) return null;
 
-    // VAT: 9 digits immediately before '+'
-    const vatStartIndex = plusIndex - 9;
-    if (vatStartIndex < 18) return null; // VAT can't start before position 19
-    const vatString = row.substring(vatStartIndex, plusIndex);
-    if (!/^\d{9}$/.test(vatString)) return null;
-    const vatAmount = parseInt(vatString, 10);
-
-    // Receipt number: between position 19 (index 18) and VAT start
-    const receiptSection = row.substring(18, vatStartIndex);
-    // Receipt section can be empty in some edge cases, or contain digits
-    if (receiptSection.length > 0 && !/^\d+$/.test(receiptSection)) return null;
+    // Receipt number: positions 23-31 (index 22-30)
+    const receiptSection = row.substring(22, 31);
+    if (!/^\d{9}$/.test(receiptSection)) return null;
     // Remove leading zeros to get actual receipt number
     const receiptNumber = receiptSection.replace(/^0+/, '') || '0';
 
-    // Sum without VAT: 10 digits immediately after '+'
-    const sumString = row.substring(plusIndex + 1, plusIndex + 11);
+    // VAT: positions 32-40 (index 31-39)
+    const vatString = row.substring(31, 40);
+    if (!/^\d{9}$/.test(vatString)) return null;
+    const vatAmount = parseInt(vatString, 10);
+
+    // Sum without VAT: positions 42-51 (index 41-50)
+    const sumString = row.substring(41, 51);
     if (!/^\d{10}$/.test(sumString)) return null;
     const sumWithoutVat = parseInt(sumString, 10);
 
-    // Allocation number: last 9 digits
-    const allocationNumber = row.substring(row.length - 9);
+    // Allocation number: positions 52-60 (index 51-59)
+    const allocationNumber = row.substring(51, 60);
     if (!/^\d{9}$/.test(allocationNumber)) return null;
 
     return {
@@ -125,6 +123,8 @@ export interface ParseResult {
 
 /**
  * Parse an entire PCN874 file
+ * Only T rows (supplier rows) are parsed and returned
+ * All other rows are preserved but not parsed
  */
 export function parseFile(content: string): ParseResult {
   const receipts: IReceipt[] = [];
@@ -148,7 +148,7 @@ export function parseFile(content: string): ParseResult {
     // Skip empty lines
     if (!line) continue;
 
-    // Check if this is a receipt row
+    // Check if this is a supplier row (T row)
     if (isReceiptRow(line)) {
       const receipt = parseReceiptRow(line, receiptIndex, lineNumber);
       if (receipt) {
@@ -156,21 +156,21 @@ export function parseFile(content: string): ParseResult {
         lineMap.set(receiptIndex, lineNumber);
         receiptIndex++;
       } else {
-        errors.push(`Line ${lineNumber}: Invalid receipt row format`);
+        errors.push(`Line ${lineNumber}: Invalid supplier row format`);
       }
     }
-    // Non-receipt rows (header, footer, etc.) are ignored but not errors
+    // Non-T rows (R, S, header, footer, etc.) are ignored but not errors
   }
 
   if (receipts.length === 0 && errors.length === 0) {
-    errors.push('No valid receipt rows found in file');
+    errors.push('No valid supplier rows (T rows) found in file');
   }
 
   return { receipts, errors, lineMap };
 }
 
 /**
- * Update the allocation number for a specific receipt in the file content
+ * Update the allocation number for a specific supplier receipt (T row) in the file content
  * Returns the modified file content
  */
 export function updateAllocation(
@@ -198,14 +198,14 @@ export function updateAllocation(
 
   const originalLine = lines[lineIndex];
 
-  // Verify it's a valid receipt row
+  // Verify it's a valid supplier row (T row)
   if (!isReceiptRow(originalLine)) {
-    throw new Error(`Line ${lineNumber} is not a valid receipt row`);
+    throw new Error(`Line ${lineNumber} is not a valid supplier row (T row)`);
   }
 
-  // Replace the last 9 characters with the new allocation number
+  // Replace positions 52-60 (last 9 characters) with the new allocation number
   const modifiedLine =
-    originalLine.substring(0, originalLine.length - 9) + allocationNumber;
+    originalLine.substring(0, 51) + allocationNumber;
 
   lines[lineIndex] = modifiedLine;
 
@@ -215,7 +215,7 @@ export function updateAllocation(
 }
 
 /**
- * Search for receipts by receipt number
+ * Search for supplier receipts by receipt number
  */
 export function searchByReceiptNumber(
   receipts: IReceipt[],
@@ -230,7 +230,7 @@ export function searchByReceiptNumber(
 }
 
 /**
- * Search for a specific receipt by receipt number and business number
+ * Search for a specific supplier receipt by receipt number and business number
  */
 export function searchByReceiptAndBusiness(
   receipts: IReceipt[],

@@ -54,10 +54,10 @@ export const fileContentSchema = z
   .refine(
     (content) => {
       const lines = content.trim().split(/\r?\n/);
-      // At least one line must be a valid data row (starts with letter, contains '+')
-      return lines.some((line) => /^[A-Z]/i.test(line) && line.includes('+'));
+      // At least one line must be a valid supplier row (starts with 'T', 60 chars, '+' at position 41)
+      return lines.some((line) => /^T/i.test(line) && line.length === 60 && line[40] === '+');
     },
-    'File must contain at least one valid receipt row'
+    'File must contain at least one valid supplier row (T row)'
   )
   .refine(
     (content) => {
@@ -68,20 +68,23 @@ export const fileContentSchema = z
   );
 
 // ============================================
-// Receipt Row Validation
+// Supplier Row Validation (T Rows Only)
 // ============================================
 
 /**
- * Validates a single receipt row format
+ * Validates a single supplier row (T row) format
+ * T rows are exactly 60 characters with fixed field positions
  */
-export const receiptRowSchema = z.string().refine(
+export const supplierRowSchema = z.string().refine(
   (row) => {
-    // Must start with a letter (any letter A-Z)
-    if (!/^[A-Z]/i.test(row)) return false;
+    // Must start with 'T' (supplier row)
+    if (!/^T/i.test(row)) return false;
 
-    // Must contain '+' separator
-    const plusIndex = row.indexOf('+');
-    if (plusIndex === -1) return false;
+    // Must be exactly 60 characters
+    if (row.length !== 60) return false;
+
+    // Must have '+' at position 41 (index 40)
+    if (row[40] !== '+') return false;
 
     // Business number (positions 2-10, 9 digits) - index 1-9
     const businessNumber = row.substring(1, 10);
@@ -99,27 +102,33 @@ export const receiptRowSchema = z.string().refine(
     const day = parseInt(row.substring(16, 18), 10);
     if (day < 1 || day > 31) return false;
 
-    // VAT (9 digits before '+')
-    const vat = row.substring(plusIndex - 9, plusIndex);
+    // Code (positions 19-22) - index 18-21
+    const code = row.substring(18, 22);
+    if (!/^\d{4}$/.test(code)) return false;
+
+    // Receipt number (positions 23-31) - index 22-30
+    const receiptNumber = row.substring(22, 31);
+    if (!/^\d{9}$/.test(receiptNumber)) return false;
+
+    // VAT (positions 32-40) - index 31-39
+    const vat = row.substring(31, 40);
     if (!/^\d{9}$/.test(vat)) return false;
 
-    // Receipt number extraction: between position 18 and VAT start
-    const receiptSection = row.substring(18, plusIndex - 9);
-    // Must be all digits (zero-padded receipt number)
-    if (receiptSection.length > 0 && !/^\d+$/.test(receiptSection)) return false;
-
-    // Sum without VAT (10 digits after '+')
-    const sumWithoutVat = row.substring(plusIndex + 1, plusIndex + 11);
+    // Sum without VAT (positions 42-51) - index 41-50
+    const sumWithoutVat = row.substring(41, 51);
     if (!/^\d{10}$/.test(sumWithoutVat)) return false;
 
-    // Allocation number (last 9 digits)
-    const allocation = row.substring(row.length - 9);
+    // Allocation number (positions 52-60) - index 51-59
+    const allocation = row.substring(51, 60);
     if (!/^\d{9}$/.test(allocation)) return false;
 
     return true;
   },
-  'Invalid receipt row format'
+  'Invalid supplier row format'
 );
+
+// Keep backward compatibility alias
+export const receiptRowSchema = supplierRowSchema;
 
 // ============================================
 // Search Input Schemas

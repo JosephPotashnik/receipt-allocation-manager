@@ -3,15 +3,17 @@
 ## 1. Project Overview
 
 **Receipt Allocation Manager** is a web application that allows authenticated users to:
-1. Upload PCN874 format receipt files
-2. Search for specific receipts by receipt number (and business number if needed)
-3. Assign allocation numbers to receipts
+1. Upload PCN874 format text files containing supplier receipt records
+2. Search for specific supplier receipts (T rows) by receipt number (and business number if needed)
+3. Assign allocation numbers to supplier receipts
 4. Download the modified file
+
+**Important**: Only rows beginning with the letter **'T'** are supplier rows that need to be processed. All other rows (R, S, header, footer, etc.) are left unchanged.
 
 ## 2. User Stories
 
 ### 2.1 Authentication
-- **US-001**: As a user, I can sign up with email and password
+- **US-001**: ~~As a user, I can sign up with email and password~~ (Removed - users managed in Supabase)
 - **US-002**: As a user, I can log in with my credentials
 - **US-003**: As a user, I can log out from the application
 - **US-004**: As an unauthenticated user, I am redirected to the login page when accessing protected routes
@@ -20,88 +22,92 @@
 - **US-005**: As a user, I can upload a PCN874 text file
 - **US-006**: As a user, I see an error if the file format is invalid
 - **US-007**: As a user, I see a success message when the file is parsed correctly
-- **US-008**: As a user, I can see a summary of how many receipts were found in the file
+- **US-008**: As a user, I can see a summary of how many supplier receipts (T rows) were found in the file
 
 ### 2.3 Receipt Search
-- **US-009**: As a user, I can search for a receipt by receipt number
-- **US-010**: As a user, if multiple receipts share the same receipt number, I am prompted to enter the business number
-- **US-011**: As a user, I see the receipt details when a unique match is found
-- **US-012**: As a user, I see an error if no receipt matches my search
+- **US-009**: As a user, I can search for a supplier receipt by receipt number
+- **US-010**: As a user, if multiple supplier receipts share the same receipt number, I am prompted to enter the business number
+- **US-011**: As a user, I see the supplier receipt details when a unique match is found
+- **US-012**: As a user, I see an error if no supplier receipt matches my search
 
 ### 2.4 Allocation Assignment
-- **US-013**: As a user, I can enter a 9-digit allocation number for a selected receipt
+- **US-013**: As a user, I can enter a 9-digit allocation number for a selected supplier receipt
 - **US-014**: As a user, I see an error if the allocation number is not exactly 9 digits
 - **US-015**: As a user, I see confirmation when the allocation is successfully applied
-- **US-016**: As a user, I can apply allocations to multiple receipts in the same session
+- **US-016**: As a user, I can apply allocations to multiple supplier receipts in the same session
 
 ### 2.5 File Download
 - **US-017**: As a user, I can download the modified file
 - **US-018**: As a user, I am warned that closing the browser will lose unsaved work
-- **US-019**: As a user, the downloaded file has the same format as the original with only the allocation numbers changed
+- **US-019**: As a user, the downloaded file has the same format as the original with only the allocation numbers of supplier receipts (T rows) changed
 
 ## 3. PCN874 File Format Specification
 
 ### 3.1 File Structure
 ```
-[Optional Header/Other Rows]
-[Receipt Row 1]  - Starts with any letter (A-Z) and contains '+'
-[Receipt Row 2]  - Starts with any letter (A-Z) and contains '+'
+[Header Row - O prefix]           - Optional, different format
+[Non-supplier rows - R, S, etc.]  - Ignored for processing
+[Supplier Row 1 - T prefix]       - **PROCESSED** - starts with 'T' and contains '+'
+[Supplier Row 2 - T prefix]       - **PROCESSED** - starts with 'T' and contains '+'
 ...
-[Receipt Row N]  - Starts with any letter (A-Z) and contains '+'
-[Optional Footer/Other Rows]
+[Supplier Row N - T prefix]       - **PROCESSED** - starts with 'T' and contains '+'
+[Footer Row - X prefix]           - Optional, different format
 ```
 
-**Note**: Header and footer rows are optional. Receipt rows are identified by:
-1. Starting with a letter (A-Z)
-2. Containing a '+' separator
+**Important**: Only **T rows** (supplier rows) are processed for allocation management. All other rows are preserved but not parsed or modified.
 
-### 3.2 Receipt Row Format (Fixed-Width)
+### 3.2 Supplier Row Format (T Rows) - Fixed-Width
 
-Total row length: **60 characters** (to be confirmed with sample file)
+Total row length: **60 characters**
 
 ```
 Position  | Length | Field Name           | Example
 ----------|--------|----------------------|------------------
-1         | 1      | Row Type             | Any letter (A-Z)
-2-10      | 9      | Business Number      | 424673351
+1         | 1      | Row Type             | 'T' (supplier row)
+2-10      | 9      | Business Number      | 000719567
 11-14     | 4      | Year                 | 2025
 15-16     | 2      | Month                | 11
-17-18     | 2      | Day                  | 02
-19-X      | Var    | Receipt Number       | Zero-padded, e.g., 0014 → receipt# 14
-X-Y       | 9      | VAT Amount           | 000000719
-Y         | 1      | Separator            | '+'
-Y+1-Y+10  | 10     | Sum Without VAT      | 0000000000
-Y+11-Y+19 | 9      | Allocation Number    | 000000000 (to be replaced)
+17-18     | 2      | Day                  | 16
+19-22     | 4      | Code                 | 0006 (purpose TBD)
+23-31     | 9      | Receipt Number       | 000006394 (zero-padded)
+32-40     | 9      | VAT Amount           | 000004576
+41        | 1      | Separator            | '+'
+42-51     | 10     | Sum Without VAT      | 0000025424
+52-60     | 9      | Allocation Number    | 000006394 (to be replaced)
 ```
 
-### 3.3 Parsing Algorithm
+### 3.3 Parsing Algorithm (T Rows Only)
 
-1. **Identify receipt rows**: Rows starting with a letter (A-Z) and containing '+'
-2. **Locate the '+' symbol** in the row
-3. **Extract VAT**: 9 digits immediately before the '+'
-4. **Extract Receipt Number**: The digits between position 18 and the VAT start position, then remove leading zeros
-5. **Extract Sum Without VAT**: 10 digits immediately after the '+'
-6. **Extract Allocation Number**: Last 9 digits of the row (to be replaced)
-7. **Extract Fixed Fields**: Business number (pos 2-10), Year (11-14), Month (15-16), Day (17-18)
+1. **Identify supplier rows**: Rows starting with letter 'T' and containing '+'
+2. **Skip non-T rows**: All other rows (R, S, O, X, etc.) are ignored during parsing
+3. **Extract fields at fixed positions**:
+   - Business Number: positions 2-10 (index 1-9)
+   - Year: positions 11-14 (index 10-13)
+   - Month: positions 15-16 (index 14-15)
+   - Day: positions 17-18 (index 16-17)
+   - Receipt Number: positions 23-31 (index 22-30), remove leading zeros
+   - VAT Amount: positions 32-40 (index 31-39)
+   - Sum Without VAT: positions 42-51 (index 41-50)
+   - Allocation Number: positions 52-60 (index 51-59), last 9 digits
 
-### 3.4 Sample Row Analysis
+### 3.4 Sample Supplier Row Analysis (T Row)
 
 ```
-R424673351202511020014000000000000000719+0000000000000000000
-│└────────┘└──┘││└──┘└─────────────┘└───┘│└────────┘└───────┘
-│    │      │  ││  │        │        │   │    │         │
-│ Business Year││Day│   Zero-pad   VAT  +  Sum    Allocation
-│  Number     ││   Receipt#              Without    (9 digits)
+T000719567202511160006000006394000004576+0000025424000006394
+│└────────┘└──┘││└──┘└────────┘└────────┘│└────────┘└────────┘
+│    │      │  ││  │     │         │     │     │         │
+│ Business Year││Day│  Receipt    VAT   +   Sum     Allocation
+│  Number     ││   Code Number           Without    (9 digits)
 │            Month                        VAT
-Row Type (any letter)
+Row Type ('T' = supplier)
 ```
 
-### 3.5 Receipt Number Extraction
+### 3.5 Receipt Number Extraction (T Rows)
 
-The receipt number is embedded with leading zeros between the date and VAT fields:
-- **Position 19 to (plusIndex - 9)**: Contains zero-padded receipt number
-- **Example**: `0014000000000000000` → Receipt number is `14`
-- **Algorithm**: Remove leading zeros from this section to get the actual receipt number
+The receipt number is at a fixed position in T rows:
+- **Positions 23-31 (index 22-30)**: 9-digit zero-padded receipt number
+- **Example**: `000006394` → Receipt number is `6394`
+- **Algorithm**: Extract 9 digits from fixed position, remove leading zeros
 
 ## 4. Data Types
 

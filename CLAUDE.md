@@ -16,11 +16,13 @@ These documents contain critical details about the PCN874 file format parsing, v
 ## Project Overview
 
 This is a **Receipt Allocation Manager** - a Next.js web application that allows authenticated users to:
-1. Upload a PCN874 format text file containing receipt records
-2. Search for a specific receipt by receipt number (and business number if not unique)
+1. Upload a PCN874 format text file containing supplier receipt records
+2. Search for a specific supplier receipt (T row) by receipt number (and business number if not unique)
 3. Input an allocation number (9 digits)
-4. Replace the last 9 digits of the matching receipt row with the allocation number
+4. Replace the last 9 digits of the matching supplier receipt row with the allocation number
 5. Download the modified file
+
+**Critical**: Only rows beginning with the letter **'T'** are supplier rows that need to be processed. All other rows (R, S, O, X, header, footer, etc.) are preserved unchanged in the file.
 
 ## Tech Stack
 
@@ -44,10 +46,20 @@ This is a **Receipt Allocation Manager** - a Next.js web application that allows
 - Client-side auth state managed via Supabase client
 
 ### File Format (PCN874)
-- Fixed-width format (consistent row length per file)
-- Header/footer rows are optional
-- Data rows: Start with any letter (A-Z) and contain a '+' separator
-- Receipt number is extracted by finding the '+', taking 9 digits before it (VAT), and parsing backwards to find the receipt number
+- Fixed-width format (T rows are exactly 60 characters)
+- Header/footer rows are optional and vary in format
+- **Only T rows (supplier rows) are processed** - start with 'T' and contain '+' at position 41
+- Other row types (R, S, O, X, etc.) are preserved but not parsed
+- T Row structure (60 chars):
+  - Position 1: 'T' (row type)
+  - Positions 2-10: Business number (9 digits)
+  - Positions 11-18: Date (YYYYMMDD)
+  - Positions 19-22: Code (4 digits)
+  - Positions 23-31: Receipt number (9 digits, zero-padded)
+  - Positions 32-40: VAT (9 digits)
+  - Position 41: '+' separator
+  - Positions 42-51: Sum without VAT (10 digits)
+  - Positions 52-60: Allocation number (9 digits) - **this is what gets replaced**
 
 ## Code Style Guidelines
 
@@ -113,7 +125,9 @@ npm test             # Run tests
 ## Important Reminders
 
 - The allocation number MUST be exactly 9 digits
-- Receipt number + Business number combination is guaranteed unique
-- Row length validation is critical - reject malformed files
+- Receipt number + Business number combination is guaranteed unique within T rows
+- T row length is exactly 60 characters
+- Only T rows (supplier rows) should be parsed and made searchable
+- All other row types (R, S, O, X, etc.) are preserved unchanged in the output file
 - Always handle the edge case where receipt number is not found
 - Hebrew language support may be needed for UI (RTL consideration)

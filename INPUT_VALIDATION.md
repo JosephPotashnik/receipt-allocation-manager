@@ -106,12 +106,12 @@ function validateFileMetadata(file: File): ValidationResult {
 | Rule | Specification |
 |------|---------------|
 | Encoding | UTF-8 or ASCII |
-| Min Rows | 1 (at least 1 data row) |
+| Min Rows | 1 (at least 1 supplier row) |
 | Max Rows | 50,000 |
-| Data Rows | Start with a single letter (any letter A-Z) |
-| Row Length | All data rows must have consistent length |
+| Supplier Rows | Start with letter 'T' and contain '+' |
+| Row Length | Supplier rows (T rows) are 60 characters |
 
-**Note**: The file may contain header/footer rows, but they are not required. The parser identifies receipt rows by checking if they start with a letter and contain a '+' separator.
+**Important**: Only **T rows** (supplier rows) are processed. All other rows (R, S, O, X, etc.) are preserved but not parsed.
 
 **Zod Schema**:
 ```typescript
@@ -128,10 +128,10 @@ const fileContentSchema = z
   .refine(
     (content) => {
       const lines = content.trim().split(/\r?\n/);
-      // At least one line must be a valid data row (starts with letter, contains '+')
-      return lines.some(line => /^[A-Z]/i.test(line) && line.includes('+'));
+      // At least one line must be a valid supplier row (starts with 'T', contains '+')
+      return lines.some(line => /^T/i.test(line) && line.includes('+'));
     },
-    'File must contain at least one valid receipt row'
+    'File must contain at least one valid supplier row (T row)'
   )
   .refine(
     (content) => {
@@ -144,55 +144,59 @@ const fileContentSchema = z
 
 **Error Messages**:
 - `"File is empty"`
-- `"File must contain at least one valid receipt row"`
+- `"File must contain at least one valid supplier row (T row)"`
 - `"File exceeds maximum of 50,000 rows"`
 
 ---
 
-## 3. Receipt Row Validation
+## 3. Supplier Row Validation (T Rows Only)
 
-### 3.1 Row Structure
+**Important**: Only rows starting with 'T' (supplier rows) are processed. All other rows are preserved unchanged.
+
+### 3.1 Supplier Row Structure (T Rows)
 
 | Field | Position | Length | Validation |
 |-------|----------|--------|------------|
-| Row Type | 1 | 1 | Any letter (A-Z) |
+| Row Type | 1 | 1 | Must be 'T' |
 | Business Number | 2-10 | 9 | Numeric only |
 | Year | 11-14 | 4 | Valid year (1900-2100) |
 | Month | 15-16 | 2 | 01-12 |
 | Day | 17-18 | 2 | 01-31 |
-| Receipt Number | 19 to (plusIndex-9) | Variable | Numeric, extracted by scanning backwards from VAT to first '0' |
-| VAT | 9 before '+' | 9 | Numeric only |
-| '+' Separator | Variable | 1 | Must exist in row |
-| Sum Without VAT | 10 after '+' | 10 | Numeric only |
-| Allocation | Last 9 | 9 | Numeric only |
+| Code | 19-22 | 4 | Numeric only |
+| Receipt Number | 23-31 | 9 | Numeric only (zero-padded) |
+| VAT | 32-40 | 9 | Numeric only |
+| '+' Separator | 41 | 1 | Must be '+' |
+| Sum Without VAT | 42-51 | 10 | Numeric only |
+| Allocation | 52-60 | 9 | Numeric only |
 
-### 3.2 Receipt Number Extraction Algorithm
+Total row length: **60 characters**
 
-The receipt number is located between the date (position 18) and the VAT (9 digits before '+').
+### 3.2 Receipt Number Extraction Algorithm (T Rows)
+
+The receipt number is at a **fixed position** in T rows (unlike other row types).
 
 **Extraction Steps**:
-1. Find the '+' separator position
-2. The 9 digits immediately before '+' are the VAT
-3. Everything between position 18 and the VAT contains zero-padding + receipt number
-4. Scan backwards from the VAT start position until you hit a '0' that is part of zero-padding
-5. The non-zero digits (and any trailing zeros that are part of the number) form the receipt number
+1. Verify row starts with 'T'
+2. Extract 9 digits from positions 23-31 (index 22-30)
+3. Remove leading zeros to get the actual receipt number
 
-**Example**: `R424673351202511020014000000000000000719+0000000000000000000`
-- Position of '+': 46
-- VAT (positions 37-45): `000000719`
-- Between date and VAT (positions 18-36): `0014000000000000000`
-- Receipt number extracted: `14` (scan backwards, skip leading zeros)
+**Example**: `T000719567202511160006000006394000004576+0000025424000006394`
+- Row type: `T` (supplier)
+- Receipt number (positions 23-31): `000006394`
+- Receipt number extracted: `6394` (remove leading zeros)
 
 **Zod Schema**:
 ```typescript
-const receiptRowSchema = z.string().refine(
+const supplierRowSchema = z.string().refine(
   (row) => {
-    // Must start with a letter (any letter A-Z)
-    if (!/^[A-Z]/i.test(row)) return false;
+    // Must start with 'T' (supplier row)
+    if (!/^T/i.test(row)) return false;
 
-    // Must contain '+' separator
-    const plusIndex = row.indexOf('+');
-    if (plusIndex === -1) return false;
+    // Must be exactly 60 characters
+    if (row.length !== 60) return false;
+
+    // Must contain '+' at position 41 (index 40)
+    if (row[40] !== '+') return false;
 
     // Business number (positions 2-10, 9 digits)
     const businessNumber = row.substring(1, 10);
@@ -210,40 +214,44 @@ const receiptRowSchema = z.string().refine(
     const day = parseInt(row.substring(16, 18), 10);
     if (day < 1 || day > 31) return false;
 
-    // VAT (9 digits before '+')
-    const vat = row.substring(plusIndex - 9, plusIndex);
+    // Code (positions 19-22)
+    const code = row.substring(18, 22);
+    if (!/^\d{4}$/.test(code)) return false;
+
+    // Receipt number (positions 23-31)
+    const receiptNumber = row.substring(22, 31);
+    if (!/^\d{9}$/.test(receiptNumber)) return false;
+
+    // VAT (positions 32-40)
+    const vat = row.substring(31, 40);
     if (!/^\d{9}$/.test(vat)) return false;
 
-    // Receipt number extraction: between position 18 and VAT start
-    const receiptSection = row.substring(18, plusIndex - 9);
-    // Must be all digits (zero-padded receipt number)
-    if (!/^\d+$/.test(receiptSection)) return false;
-    // Extract actual receipt number by removing leading zeros
-    const receiptNumber = receiptSection.replace(/^0+/, '') || '0';
-
-    // Sum without VAT (10 digits after '+')
-    const sumWithoutVat = row.substring(plusIndex + 1, plusIndex + 11);
+    // Sum without VAT (positions 42-51)
+    const sumWithoutVat = row.substring(41, 51);
     if (!/^\d{10}$/.test(sumWithoutVat)) return false;
 
-    // Allocation number (last 9 digits)
-    const allocation = row.substring(row.length - 9);
+    // Allocation number (positions 52-60)
+    const allocation = row.substring(51, 60);
     if (!/^\d{9}$/.test(allocation)) return false;
 
     return true;
   },
-  'Invalid receipt row format'
+  'Invalid supplier row format'
 );
 ```
 
-### 3.3 Parsing Function
+### 3.3 Parsing Function (T Rows)
 
 ```typescript
-function parseReceiptRow(row: string, rowIndex: number): IReceipt | null {
-  // Must start with a letter
-  if (!/^[A-Z]/i.test(row)) return null;
+function parseSupplierRow(row: string, rowIndex: number, lineNumber: number): IReceipt | null {
+  // Must start with 'T'
+  if (!/^T/i.test(row)) return null;
 
-  const plusIndex = row.indexOf('+');
-  if (plusIndex === -1) return null;
+  // Must be exactly 60 characters
+  if (row.length !== 60) return null;
+
+  // Must have '+' at position 41
+  if (row[40] !== '+') return null;
 
   const rowType = row[0];
   const businessNumber = row.substring(1, 10);
@@ -251,23 +259,24 @@ function parseReceiptRow(row: string, rowIndex: number): IReceipt | null {
   const month = parseInt(row.substring(14, 16), 10);
   const day = parseInt(row.substring(16, 18), 10);
 
-  // VAT: 9 digits before '+'
-  const vatString = row.substring(plusIndex - 9, plusIndex);
-  const vatAmount = parseInt(vatString, 10);
-
-  // Receipt number: between position 18 and VAT, remove leading zeros
-  const receiptSection = row.substring(18, plusIndex - 9);
+  // Receipt number: positions 23-31 (index 22-30), remove leading zeros
+  const receiptSection = row.substring(22, 31);
   const receiptNumber = receiptSection.replace(/^0+/, '') || '0';
 
-  // Sum without VAT: 10 digits after '+'
-  const sumString = row.substring(plusIndex + 1, plusIndex + 11);
+  // VAT: positions 32-40 (index 31-39)
+  const vatString = row.substring(31, 40);
+  const vatAmount = parseInt(vatString, 10);
+
+  // Sum without VAT: positions 42-51 (index 41-50)
+  const sumString = row.substring(41, 51);
   const sumWithoutVat = parseInt(sumString, 10);
 
-  // Allocation: last 9 digits
-  const allocationNumber = row.substring(row.length - 9);
+  // Allocation: positions 52-60 (index 51-59)
+  const allocationNumber = row.substring(51, 60);
 
   return {
     rowIndex,
+    lineNumber,
     rawRow: row,
     rowType,
     businessNumber,
@@ -283,13 +292,15 @@ function parseReceiptRow(row: string, rowIndex: number): IReceipt | null {
 ```
 
 **Error Messages**:
-- `"Row does not start with a letter"`
-- `"Missing '+' separator in row"`
+- `"Row does not start with 'T'"`
+- `"Row must be exactly 60 characters"`
+- `"Missing '+' separator at position 41"`
 - `"Invalid business number (must be 9 digits)"`
 - `"Invalid year"`
 - `"Invalid month (must be 01-12)"`
 - `"Invalid day (must be 01-31)"`
-- `"Invalid receipt number section"`
+- `"Invalid code (must be 4 digits)"`
+- `"Invalid receipt number (must be 9 digits)"`
 - `"Invalid VAT format (must be 9 digits)"`
 - `"Invalid sum format (must be 10 digits)"`
 - `"Invalid allocation format (must be 9 digits)"`
