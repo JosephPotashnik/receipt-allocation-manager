@@ -1,9 +1,11 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button, Input, Alert, Card, CardHeader, CardTitle, CardContent } from '@/components/ui';
 import { allocationNumberSchema } from '@/lib/validators/schemas';
 import { formatReceiptForDisplay } from '@/lib/parser/pcn874';
+import { postWithAuth, SessionExpiredError } from '@/lib/api/fetchWithAuth';
 import type { IReceipt, IUpdateResponse } from '@/types';
 
 interface AllocationFormProps {
@@ -14,7 +16,6 @@ interface AllocationFormProps {
     modifiedReceipt: IReceipt
   ) => void;
   onClear: () => void;
-  getAccessToken: () => Promise<string | null>;
 }
 
 export default function AllocationForm({
@@ -22,8 +23,8 @@ export default function AllocationForm({
   fileContent,
   onAllocationSuccess,
   onClear,
-  getAccessToken,
 }: AllocationFormProps) {
+  const router = useRouter();
   const [allocationNumber, setAllocationNumber] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -48,25 +49,11 @@ export default function AllocationForm({
     setIsLoading(true);
 
     try {
-      // Get JWT token
-      const token = await getAccessToken();
-      if (!token) {
-        setError('Please sign in to update allocations');
-        return;
-      }
-
-      // Send to API
-      const response = await fetch('/api/update-receipt', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          fileContent,
-          rowIndex: selectedReceipt.rowIndex,
-          allocationNumber: validation.data, // Padded to 9 digits
-        }),
+      // Send to API with automatic auth and token refresh
+      const response = await postWithAuth('/api/update-receipt', {
+        fileContent,
+        rowIndex: selectedReceipt.rowIndex,
+        allocationNumber: validation.data, // Padded to 9 digits
       });
 
       const result: IUpdateResponse = await response.json();
@@ -82,7 +69,13 @@ export default function AllocationForm({
       onAllocationSuccess(result.data.modifiedContent, result.data.modifiedReceipt);
     } catch (err) {
       console.error('Update allocation error:', err);
-      setError('Failed to update allocation. Please try again.');
+      if (err instanceof SessionExpiredError) {
+        // Redirect to login on session expiration
+        router.push('/login');
+        return;
+      }
+      const message = err instanceof Error ? err.message : 'Failed to update allocation. Please try again.';
+      setError(message);
     } finally {
       setIsLoading(false);
     }

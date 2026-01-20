@@ -6,7 +6,6 @@ import ReceiptSearch from '@/components/features/receipts/ReceiptSearch';
 import AllocationForm from '@/components/features/receipts/AllocationForm';
 import FileDownload from '@/components/features/receipts/FileDownload';
 import { Alert } from '@/components/ui';
-import { getAccessToken } from '@/lib/supabase/auth';
 import type { IReceipt, IFileData } from '@/types';
 
 export default function DashboardPage() {
@@ -71,11 +70,6 @@ export default function DashboardPage() {
     setSelectedReceipt(null);
   }, []);
 
-  // Get access token for API calls
-  const handleGetAccessToken = useCallback(async () => {
-    return await getAccessToken();
-  }, []);
-
   return (
     <div className="space-y-6">
       {/* Warning about unsaved changes */}
@@ -87,10 +81,7 @@ export default function DashboardPage() {
       )}
 
       {/* File Upload Section */}
-      <FileUploader
-        onUploadSuccess={handleUploadSuccess}
-        getAccessToken={handleGetAccessToken}
-      />
+      <FileUploader onUploadSuccess={handleUploadSuccess} />
 
       {/* Show these sections only after file is uploaded */}
       {fileData && (
@@ -116,7 +107,6 @@ export default function DashboardPage() {
                   fileContent={fileData.modifiedContent}
                   onAllocationSuccess={handleAllocationSuccess}
                   onClear={handleClearSelection}
-                  getAccessToken={handleGetAccessToken}
                 />
               ) : (
                 <FileDownload

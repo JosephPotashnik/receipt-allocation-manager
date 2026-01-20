@@ -29,10 +29,13 @@ export default function ProtectedLayout({
 
     checkSession();
 
-    // Subscribe to auth changes
+    // Subscribe to auth changes (Supabase auto-refreshes tokens when this listener is active)
     const { data: { subscription } } = onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT' || !session) {
         router.push('/login');
+      } else if (event === 'TOKEN_REFRESHED') {
+        // Token was automatically refreshed by Supabase
+        console.log('Token refreshed');
       } else if (session) {
         setUserEmail((session as { user: { email?: string } }).user.email || null);
       }

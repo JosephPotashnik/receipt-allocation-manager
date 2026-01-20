@@ -1,19 +1,20 @@
 'use client';
 
 import { useState, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button, Alert, Card, CardHeader, CardTitle, CardContent } from '@/components/ui';
 import { MAX_FILE_SIZE, ALLOWED_EXTENSIONS } from '@/lib/validators/schemas';
+import { postWithAuth, SessionExpiredError } from '@/lib/api/fetchWithAuth';
 import type { IReceipt, IParseResponse } from '@/types';
 
 interface FileUploaderProps {
   onUploadSuccess: (receipts: IReceipt[], content: string, fileName: string) => void;
-  getAccessToken: () => Promise<string | null>;
 }
 
 export default function FileUploader({
   onUploadSuccess,
-  getAccessToken,
 }: FileUploaderProps) {
+  const router = useRouter();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -63,27 +64,13 @@ export default function FileUploader({
     setIsUploading(true);
 
     try {
-      // Get JWT token
-      const token = await getAccessToken();
-      if (!token) {
-        setError('Please sign in to upload files');
-        return;
-      }
-
       // Read file content
       const fileContent = await selectedFile.text();
 
-      // Send to API
-      const response = await fetch('/api/parse', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          fileContent,
-          fileName: selectedFile.name,
-        }),
+      // Send to API with automatic auth and token refresh
+      const response = await postWithAuth('/api/parse', {
+        fileContent,
+        fileName: selectedFile.name,
       });
 
       const result: IParseResponse = await response.json();
@@ -103,7 +90,13 @@ export default function FileUploader({
       }
     } catch (err) {
       console.error('Upload error:', err);
-      setError('Failed to upload file. Please try again.');
+      if (err instanceof SessionExpiredError) {
+        // Redirect to login on session expiration
+        router.push('/login');
+        return;
+      }
+      const message = err instanceof Error ? err.message : 'Failed to upload file. Please try again.';
+      setError(message);
     } finally {
       setIsUploading(false);
     }
