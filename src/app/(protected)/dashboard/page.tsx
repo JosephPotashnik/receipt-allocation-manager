@@ -92,6 +92,14 @@ export default function DashboardPage() {
             {fileData.fileName}
           </Alert>
 
+          {/* Download Section - Always visible when file is loaded */}
+          <FileDownload
+            fileName={fileData.fileName}
+            modifiedContent={fileData.modifiedContent}
+            modifiedCount={fileData.modifiedCount}
+            totalReceipts={fileData.totalReceipts}
+          />
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Left Column: Search */}
             <ReceiptSearch
@@ -99,24 +107,15 @@ export default function DashboardPage() {
               onReceiptSelect={handleReceiptSelect}
             />
 
-            {/* Right Column: Allocation or Download */}
-            <div className="space-y-6">
-              {selectedReceipt ? (
-                <AllocationForm
-                  selectedReceipt={selectedReceipt}
-                  fileContent={fileData.modifiedContent}
-                  onAllocationSuccess={handleAllocationSuccess}
-                  onClear={handleClearSelection}
-                />
-              ) : (
-                <FileDownload
-                  fileName={fileData.fileName}
-                  modifiedContent={fileData.modifiedContent}
-                  modifiedCount={fileData.modifiedCount}
-                  totalReceipts={fileData.totalReceipts}
-                />
-              )}
-            </div>
+            {/* Right Column: Allocation Form (when receipt selected) */}
+            {selectedReceipt && (
+              <AllocationForm
+                selectedReceipt={selectedReceipt}
+                fileContent={fileData.modifiedContent}
+                onAllocationSuccess={handleAllocationSuccess}
+                onClear={handleClearSelection}
+              />
+            )}
           </div>
         </>
       )}
