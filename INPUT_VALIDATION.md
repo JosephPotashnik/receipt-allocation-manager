@@ -1,8 +1,12 @@
 # INPUT_VALIDATION.md - Input Validation Rules
 
+## Implementation Status: COMPLETE
+
+All validation schemas have been implemented in `src/lib/validators/schemas.ts`.
+
 ## Overview
 
-This document defines all input validation rules for the Receipt Allocation Manager. All validations are implemented using **Zod** schemas for runtime type safety.
+This document defines all input validation rules for the Receipt Allocation Manager. All validations are implemented using **Zod v4** schemas for runtime type safety. Note: Zod v4 uses `issues` instead of `errors` for accessing validation error details.
 
 ---
 

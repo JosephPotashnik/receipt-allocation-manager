@@ -1,5 +1,9 @@
 # IMPLEMENTATION.md - Step-by-Step Build Plan
 
+## Implementation Status: COMPLETE
+
+All phases have been implemented. The application is ready for deployment.
+
 ## Overview
 
 This document outlines the implementation order for the Receipt Allocation Manager. Each step builds upon the previous ones, ensuring we have working, testable code at each stage.
@@ -420,16 +424,23 @@ npm install -D @types/node
 
 ## Implementation Summary
 
-| Phase | Steps | Description |
-|-------|-------|-------------|
-| 1 | 1.1 - 1.3 | Project setup and configuration |
-| 2 | 2.1 - 2.3 | Core types, validation, and parser |
-| 3 | 3.1 - 3.3 | Supabase authentication |
-| 4 | 4.1 - 4.2 | API routes |
-| 5 | 5.1 - 5.6 | UI components |
-| 6 | 6.1 - 6.5 | Pages and layouts |
-| 7 | 7.1 - 7.3 | Testing and polish |
-| 8 | 8.1 - 8.3 | Deployment |
+| Phase | Steps | Description | Status |
+|-------|-------|-------------|--------|
+| 1 | 1.1 - 1.3 | Project setup and configuration | COMPLETE |
+| 2 | 2.1 - 2.3 | Core types, validation, and parser | COMPLETE |
+| 3 | 3.1 - 3.3 | Supabase authentication | COMPLETE |
+| 4 | 4.1 - 4.2 | API routes | COMPLETE |
+| 5 | 5.1 - 5.6 | UI components | COMPLETE |
+| 6 | 6.1 - 6.5 | Pages and layouts | COMPLETE |
+| 7 | 7.1 - 7.3 | Testing and polish | COMPLETE |
+| 8 | 8.1 - 8.3 | Deployment | READY |
+
+## Additional Features Implemented
+
+- **Automatic Token Refresh**: Supabase `onAuthStateChange` listener for background token refresh
+- **401 Retry Logic**: `fetchWithAuth` wrapper automatically retries failed requests after token refresh
+- **SessionExpiredError**: Custom error class for handling session expiration with redirect to login
+- **Download Always Visible**: File download section is always visible when a file is loaded
 
 ---
 

@@ -11,7 +11,7 @@ export default function AuthLayout({
             Receipt Allocation Manager
           </h1>
           <p className="mt-2 text-sm text-gray-600">
-            Manage PCN874 file allocations
+            Manage receipt file allocations
           </p>
         </div>
         <div className="bg-white shadow-md rounded-lg p-8">{children}</div>

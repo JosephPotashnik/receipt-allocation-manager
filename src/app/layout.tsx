@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Receipt Allocation Manager",
-  description: "Upload PCN874 files and manage receipt allocations",
+  description: "Upload receipt files and manage allocations",
 };
 
 export default function RootLayout({

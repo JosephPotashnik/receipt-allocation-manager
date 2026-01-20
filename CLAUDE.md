@@ -1,5 +1,9 @@
 # CLAUDE.md - AI Assistant Guidelines for Receipt Allocation Manager
 
+## Project Status: IMPLEMENTED
+
+This project has been fully implemented and is ready for deployment.
+
 ## Required Reading
 
 **IMPORTANT**: Before working on this project, you MUST read all steering documents:
@@ -9,16 +13,16 @@
 3. **INPUT_VALIDATION.md** - All validation rules, Zod schemas, parsing algorithms
 4. **IMPLEMENTATION.md** - Step-by-step build plan with dependencies
 
-These documents contain critical details about the PCN874 file format parsing, validation rules, and implementation order. Always refer to them when implementing features.
+These documents contain critical details about the fixed-width file format parsing, validation rules, and implementation order. Always refer to them when implementing features.
 
 ---
 
 ## Project Overview
 
 This is a **Receipt Allocation Manager** - a Next.js web application that allows authenticated users to:
-1. Upload a PCN874 format text file containing supplier receipt records
+1. Upload a fixed-width format text file containing supplier receipt records
 2. Search for a specific supplier receipt (T row) by receipt number (and business number if not unique)
-3. Input an allocation number (9 digits)
+3. Input an allocation number (1-9 digits, automatically zero-padded)
 4. Replace the last 9 digits of the matching supplier receipt row with the allocation number
 5. Download the modified file
 
@@ -41,11 +45,14 @@ This is a **Receipt Allocation Manager** - a Next.js web application that allows
 - Users must download modified files before session ends or work is lost
 
 ### Authentication Flow
-- All API routes must verify Supabase JWT tokens
-- Use middleware for protected routes
-- Client-side auth state managed via Supabase client
+- All API routes verify Supabase JWT tokens from Authorization header
+- Middleware protects routes and redirects unauthenticated users
+- Client-side auth state managed via Supabase client with `onAuthStateChange` listener
+- Automatic token refresh via Supabase's built-in refresh mechanism
+- 401 retry logic in `fetchWithAuth` wrapper for additional resilience
+- `SessionExpiredError` class for handling session expiration with automatic redirect to login
 
-### File Format (PCN874)
+### File Format (Fixed-Width Supplier Receipts)
 - Fixed-width format (T rows are exactly 60 characters)
 - Header/footer rows are optional and vary in format
 - **Only T rows (supplier rows) are processed** - start with 'T' and contain '+' at position 41
@@ -56,7 +63,7 @@ This is a **Receipt Allocation Manager** - a Next.js web application that allows
   - Positions 11-18: Date (YYYYMMDD)
   - Positions 19-22: Code (4 digits)
   - Positions 23-31: Receipt number (9 digits, zero-padded)
-  - Positions 32-40: VAT (9 digits)
+  - Positions 32-40: VAT amount (9 digits)
   - Position 41: '+' separator
   - Positions 42-51: Sum without VAT (10 digits)
   - Positions 52-60: Allocation number (9 digits) - **this is what gets replaced**
@@ -77,12 +84,15 @@ src/
 │   ├── api/              # API routes
 │   └── layout.tsx
 ├── components/
-│   ├── ui/               # Reusable UI components
+│   ├── ui/               # Reusable UI components (Button, Input, Card, Alert)
 │   └── features/         # Feature-specific components
+│       ├── auth/         # LoginForm, SignupForm, LogoutButton
+│       └── receipts/     # FileUploader, ReceiptSearch, AllocationForm, FileDownload
 ├── lib/
-│   ├── supabase/         # Supabase client config
-│   ├── parser/           # PCN874 file parser
-│   └── validators/       # Input validation schemas
+│   ├── api/              # fetchWithAuth wrapper with token refresh
+│   ├── supabase/         # Supabase client config and auth helpers
+│   ├── parser/           # Fixed-width file parser
+│   └── validators/       # Zod validation schemas
 └── types/                # TypeScript type definitions
 ```
 

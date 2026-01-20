@@ -113,7 +113,7 @@ export default function FileUploader({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Upload PCN874 File</CardTitle>
+        <CardTitle>Upload Receipt File</CardTitle>
       </CardHeader>
       <CardContent>
         {error && (

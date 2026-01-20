@@ -1,11 +1,15 @@
 # SPECIFICATIONS.md - Functional Requirements Document
 
+## Implementation Status: COMPLETE
+
+All user stories and requirements have been implemented.
+
 ## 1. Project Overview
 
 **Receipt Allocation Manager** is a web application that allows authenticated users to:
-1. Upload PCN874 format text files containing supplier receipt records
+1. Upload fixed-width format text files containing supplier receipt records
 2. Search for specific supplier receipts (T rows) by receipt number (and business number if needed)
-3. Assign allocation numbers to supplier receipts
+3. Assign allocation numbers (1-9 digits, automatically zero-padded) to supplier receipts
 4. Download the modified file
 
 **Important**: Only rows beginning with the letter **'T'** are supplier rows that need to be processed. All other rows (R, S, header, footer, etc.) are left unchanged.

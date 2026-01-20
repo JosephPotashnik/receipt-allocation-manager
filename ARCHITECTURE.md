@@ -1,5 +1,9 @@
 # ARCHITECTURE.md - System Architecture Document
 
+## Implementation Status: COMPLETE
+
+All components described in this document have been implemented.
+
 ## System Overview
 
 ```
@@ -264,6 +268,28 @@ export async function POST(request: Request) {
   // 3. If invalid, return 401
   // 4. Process request
 }
+```
+
+### Client-Side Token Refresh
+
+```typescript
+// src/lib/api/fetchWithAuth.ts
+// Automatic token refresh with 401 retry logic
+export async function fetchWithAuth(url: string, options: FetchOptions): Promise<Response> {
+  // 1. Get current access token
+  // 2. Make request with Authorization header
+  // 3. If 401, attempt token refresh via Supabase
+  // 4. Retry request with new token
+  // 5. If refresh fails, throw SessionExpiredError
+}
+
+// src/app/(protected)/layout.tsx
+// Supabase onAuthStateChange listener enables automatic background token refresh
+const { data: { subscription } } = onAuthStateChange((event, session) => {
+  if (event === 'TOKEN_REFRESHED') {
+    // Token automatically refreshed by Supabase
+  }
+});
 ```
 
 ## Error Handling Strategy
